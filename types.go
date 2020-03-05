@@ -22,6 +22,11 @@ type Transaction struct {
 	TransactionID   int
 }
 
+//NewTransaction returns a new Transaction objects
+func NewTransaction() *Transaction {
+	return &Transaction{}
+}
+
 //Marshal transaction to json
 func (t *Transaction) Marshal() ([]byte, error) {
 	return json.Marshal(t)
@@ -38,6 +43,27 @@ func (t *Transaction) Populate(ebs *ebs_fields.GenericEBSResponseFields, name st
 }
 
 func (t *Transaction) createAll(db *gorm.DB) error {
+	// db.AutoMigrate(&User{})
+	db.AutoMigrate(&Card{})
+	db.AutoMigrate(&Source{})
+	db.AutoMigrate(&Destination{})
+	db.AutoMigrate(&TransactionType{})
+
+	if err := db.AutoMigrate(&Transaction{}).Error; err != nil {
+		log.Printf("Error in AutoMigrate: Error: %v", err)
+		return err
+	}
+	if err := db.Create(t).Error; err != nil {
+		log.Printf("Error in db.Create: Error: %v", err)
+		return err
+	}
+
+	return nil
+
+}
+
+//Create commits result to database. It assumed a populated struct, Transaction.
+func (t *Transaction) Create(db *gorm.DB) error {
 	// db.AutoMigrate(&User{})
 	db.AutoMigrate(&Card{})
 	db.AutoMigrate(&Source{})
