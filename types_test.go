@@ -129,6 +129,39 @@ func TestUser_GetTranSummary(t *testing.T) {
 	}
 }
 
+//GetFailedAmount
+func TestUser_GetFailedAmount(t *testing.T) {
+	db := getDB("/mnt/c/Users/MSI/Documents/testx.db")
+	type fields struct {
+		Model        gorm.Model
+		Transactions []Transaction
+		Cards        []Card
+	}
+	type args struct {
+		db *gorm.DB
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   Summary
+	}{
+		{"successful test", fields{Model: gorm.Model{ID: 1}}, args{db: db}, Summary{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := &User{
+				Model:        tt.fields.Model,
+				Transactions: tt.fields.Transactions,
+				Cards:        tt.fields.Cards,
+			}
+			if got := u.GetFailedAmount(tt.args.db); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("User.GetFailedAmount() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestUser_GetMostUsedService(t *testing.T) {
 	db := getDB("/mnt/c/Users/MSI/Documents/testx.db")
 	type fields struct {
@@ -155,6 +188,38 @@ func TestUser_GetMostUsedService(t *testing.T) {
 				Cards:        tt.fields.Cards,
 			}
 			if got := u.GetMostUsedService(tt.args.db); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("User.GetTranSummary() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUser_GetSpending(t *testing.T) {
+	db := getDB("/mnt/c/Users/MSI/Documents/testx.db")
+	type fields struct {
+		Model        gorm.Model
+		Transactions []Transaction
+		Cards        []Card
+	}
+	type args struct {
+		db *gorm.DB
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   Summary
+	}{
+		{"successful test", fields{Model: gorm.Model{ID: 1}}, args{db: db}, Summary{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := &User{
+				Model:        tt.fields.Model,
+				Transactions: tt.fields.Transactions,
+				Cards:        tt.fields.Cards,
+			}
+			if got := u.GetSpending(tt.args.db); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("User.GetTranSummary() = %#v, want %#v", got, tt.want)
 			}
 		})

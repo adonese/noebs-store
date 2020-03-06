@@ -59,18 +59,25 @@ func (u *User) GetSucceededCount(db *gorm.DB) int {
 	return count
 }
 
-func (u *User) GetFailedAmount(db *gorm.DB) int {
+//GetFailedAmount responds with the failed services
+func (u *User) GetFailedAmount(db *gorm.DB) []Summary {
 	id := u.ID
-	var count int
-	db.Exec("select sum(amount) from transactions where user_id = 1 AND successful = 0", &id).Find(&count)
-	return count
+	var summary []Summary
+	db.Raw(`select tt.name, t.service_id, sum(t.amount) as amount, count(*) as count from 
+	transactions t
+	inner join users u on u.ID = t.user_id
+	JOIN transaction_types tt
+	where t.user_id = ? AND t.successful = 0 AND tt.id = service_id
+	group by t.service_id
+	`, &id).Scan(&summary)
+	return summary
 }
 
 //GetSpending returns the sum of spending of this user
-func (u *User) GetSpending(db *gorm.DB) int {
+func (u *User) GetSpending(db *gorm.DB) float32 {
 	id := u.ID
-	var count int
-	db.Exec("select sum(amount) from transactions where user_id = 1 AND successful = 1", &id).Find(&count)
+	var count float32
+	db.Raw("select sum(amount) from transactions where user_id = ? AND successful = 1", &id).Count(&count)
 	return count
 }
 
