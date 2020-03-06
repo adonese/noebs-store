@@ -75,14 +75,19 @@ func (u *User) GetSpending(db *gorm.DB) int {
 }
 
 //GetMostUsedService returns a list of most used services
-func (u *User) GetMostUsedService(db *gorm.DB) int {
+func (u *User) GetMostUsedService(db *gorm.DB) []Summary {
 	id := u.ID
-	var count int
+	var summary []Summary
 
-	db.Exec(`select sum(purchase), sum(p2p), sum(zain_top_up), sum(mtn_top_up) from transaction_types tt
-inner join transactions t on t.ID = tt.transaction_id
-where user_id = 1`, &id).Find(&count)
-	return count
+	db.Raw(`select tt.name, t.service_id, count(*) as count from 
+	transactions t
+	inner join users u on u.ID = t.user_id
+	JOIN transaction_types tt
+	where t.user_id = 1 AND t.successful = 1 AND tt.id = service_id
+	group by t.service_id
+	order by count desc
+	`, &id).Find(&summary)
+	return summary
 }
 
 //GetTranSummary returns a summary of transactions
