@@ -8,18 +8,39 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
+// User List transactions associated to this user
+type User struct {
+	gorm.Model
+	Transactions []Transaction
+	Cards        []Card
+}
+
+func (u *User) createAllUser(db *gorm.DB) error {
+	if err := db.AutoMigrate(&User{}, &Card{}).Error; err != nil {
+		log.Printf("Error in db.AutoMigrate: %v", err)
+		return err
+	}
+	if err := db.Create(u).Error; err != nil {
+		log.Printf("Error in db.AutoMigrate: %v", err)
+		return err
+	}
+	return nil
+}
+
 //Transaction table
 type Transaction struct {
 	gorm.Model
 	// TransactionID int
-	Source          Source
-	SourceID        int
-	Destination     Destination
-	DestinationID   int
+	Source      Source
+	Destination Destination
+
+	// DestinationID   int
 	Amount          float32
 	Successful      bool
 	TransactionType TransactionType
-	TransactionID   int
+	// TransactionID   int
+	UserID uint
+	// SourceID uint
 }
 
 //NewTransaction returns a new Transaction objects
@@ -36,7 +57,7 @@ func (t *Transaction) Marshal() ([]byte, error) {
 func (t *Transaction) Populate(ebs *ebs_fields.GenericEBSResponseFields, name string) error {
 	id := toID(name)
 	t.Destination.fill(ebs)
-	t.Source.fill(ebs)
+	// t.Source.fill(ebs)
 	t.TransactionType.fill(id)
 	t.Amount = ebs.TranAmount
 	return nil
@@ -47,7 +68,7 @@ func (t *Transaction) createAll(db *gorm.DB) error {
 	db.AutoMigrate(&Card{})
 	db.AutoMigrate(&Source{})
 	db.AutoMigrate(&Destination{})
-	db.AutoMigrate(&TransactionType{})
+	db.AutoMigrate(&TransactionType{}, &User{})
 
 	if err := db.AutoMigrate(&Transaction{}).Error; err != nil {
 		log.Printf("Error in AutoMigrate: Error: %v", err)
@@ -91,12 +112,14 @@ func (t *Transaction) Commit(db *gorm.DB) error {
 // Source is the transaction source. It can be initiated from a user
 // or an account. It can happen in any place within our network.
 type Source struct {
-	TransactionID uint
+	gorm.Model
 	Card
 	CardID int
 	Account
 	AccountID int
-	UserID    int
+	// UserID        int
+	// Transactions []Transaction
+	TransactionID uint
 }
 
 func (s *Source) fill(ebs *ebs_fields.GenericEBSResponseFields) {
@@ -132,7 +155,7 @@ func (d *Destination) fill(ebs *ebs_fields.GenericEBSResponseFields) {
 }
 
 // User card holder info + their associated mobile numbers
-type User struct {
+type UserProfile struct {
 	Cards   []Card
 	Mobiles []Mobile
 }
@@ -141,6 +164,7 @@ type User struct {
 type Card struct {
 	PAN     string
 	ExpDate string
+	UserID  uint
 }
 
 //Account info
