@@ -27,6 +27,103 @@ func (u *User) createAllUser(db *gorm.DB) error {
 	return nil
 }
 
+/*
+- getAll()
+- getFailedCount()
+- getSucceededCount()
+- getFailedAmount()
+- getSucceededAmount()
+- getMostUsedService()
+- getLeastUsedService()
+- getTotalSpending()
+- getCards()
+- getMobile()
+*/
+
+func (u *User) GetProfile(db *gorm.DB) User {
+	db.Find(&u)
+	return *u
+}
+
+func (u *User) GetFailedCount(db *gorm.DB) int {
+	id := u.ID
+	var count int
+	db.Exec("select count(*) from transactions where user_id = 1 AND successful = 0", &id).Find(&count)
+	return count
+}
+
+func (u *User) GetSucceededCount(db *gorm.DB) int {
+	id := u.ID
+	var count int
+	db.Exec("select count(*) from transactions where user_id = 1 AND successful = 0", &id).Find(&count)
+	return count
+}
+
+func (u *User) GetFailedAmount(db *gorm.DB) int {
+	id := u.ID
+	var count int
+	db.Exec("select sum(amount) from transactions where user_id = 1 AND successful = 0", &id).Find(&count)
+	return count
+}
+
+//GetSpending returns the sum of spending of this user
+func (u *User) GetSpending(db *gorm.DB) int {
+	id := u.ID
+	var count int
+	db.Exec("select sum(amount) from transactions where user_id = 1 AND successful = 1", &id).Find(&count)
+	return count
+}
+
+//GetMostUsedService returns a list of most used services
+func (u *User) GetMostUsedService(db *gorm.DB) int {
+	id := u.ID
+	var count int
+
+	db.Exec(`select sum(purchase), sum(p2p), sum(zain_top_up), sum(mtn_top_up) from transaction_types tt
+inner join transactions t on t.ID = tt.transaction_id
+where user_id = 1`, &id).Find(&count)
+	return count
+}
+
+//GetTranSummary returns a summary of transactions
+func (u *User) GetTranSummary(db *gorm.DB) []Summary {
+	/*
+	 name id count sum_amount
+
+	*/
+	id := u.ID
+	var summary []Summary
+
+	if err := db.Table("users").Raw(`select tt.name, t.service_id, sum(t.amount) as amount, count(*) as count from 
+	transactions t
+	inner join users u on u.ID = t.user_id
+	JOIN transaction_types tt
+	where t.user_id = 1 AND t.successful = 1 AND tt.id = service_id
+	group by t.service_id
+	`, &id).Scan(&summary).Error; err != nil {
+		log.Printf("Error in GetTranSummary: %v", err)
+	}
+	return summary
+}
+
+//GetCards returns cards associated to this card holder
+func (u *User) GetCards(db *gorm.DB) []Card {
+
+	var cards []Card
+	id := u.ID
+	db.Exec(`select * from cards where user_id = ?`, id).Find(&cards)
+	return cards
+}
+
+//GetMobiles returns mobile numbers associated to this card holder
+func (u *User) GetMobiles(db *gorm.DB) []Mobile {
+	var mobiles []Mobile
+	id := u.ID
+
+	db.Exec(`select * from mobiles where user_id = ?`, id).Find(&mobiles)
+	return mobiles
+}
+
 //Transaction table
 type Transaction struct {
 	gorm.Model
@@ -35,9 +132,9 @@ type Transaction struct {
 	Destination Destination
 
 	// DestinationID   int
-	Amount          float32
-	Successful      bool
-	TransactionType TransactionType
+	Amount     float32
+	Successful bool
+	ServiceID  uint
 	// TransactionID   int
 	UserID uint
 	// SourceID uint
@@ -58,7 +155,8 @@ func (t *Transaction) Populate(ebs *ebs_fields.GenericEBSResponseFields, name st
 	id := toID(name)
 	t.Destination.fill(ebs)
 	// t.Source.fill(ebs)
-	t.TransactionType.fill(id)
+	// t.TransactionType.fill(id)
+	t.ServiceID = uint(id)
 	t.Amount = ebs.TranAmount
 	return nil
 }
@@ -189,21 +287,46 @@ type Operator struct {
 
 //TransactionType the transactions we support at noebs
 type TransactionType struct {
-	P2p           bool
-	ZainTopUp     bool
-	SudaniTopUp   bool
-	MTNTopUp      bool
-	Electricity   bool
-	Account       bool
-	ZainBill      bool
-	MTNBill       bool
-	SudaniBill    bool
-	Purchase      bool
-	TransactionID uint
+	// P2p           bool
+	// ZainTopUp     bool
+	// SudaniTopUp   bool
+	// MTNTopUp      bool
+	// Electricity   bool
+	// Account       bool
+	// ZainBill      bool
+	// MTNBill       bool
+	// SudaniBill    bool
+	// Purchase      bool
+	// TransactionID uint
+	gorm.Model
+	Name string `gorm:"unique_index"`
 }
 
-func (tt *TransactionType) fill(id int) {
-	tt.Purchase = true
+func (tt *TransactionType) fill(db *gorm.DB) {
+	db.AutoMigrate(&tt)
+	//tt.Purchase = true
+	t := []TransactionType{TransactionType{Name: "Purchase"},
+		TransactionType{Name: "Balance"},
+		TransactionType{Name: "MTN Top Up"},
+		TransactionType{Name: "Zain Top Up"},
+		TransactionType{Name: "Sudani Top Up"},
+		TransactionType{Name: "MTN Bills"},
+		TransactionType{Name: "Sudani Bills"},
+		TransactionType{Name: "Zain Bills"},
+		TransactionType{Name: "Electricity"},
+		TransactionType{Name: "Card Transfer"}}
+	db.Create(&t[0])
+	db.Create(&t[1])
+	db.Create(&t[2])
+	db.Create(&t[3])
+	db.Create(&t[4])
+	db.Create(&t[5])
+	db.Create(&t[6])
+	db.Create(&t[7])
+	db.Create(&t[8])
+	db.Create(&t[9])
+	// db.Create(t[5])
+
 }
 
 //Payer list all of the system payers
@@ -217,4 +340,12 @@ type Payer struct {
 	ZainBill    string
 	MTNBill     string
 	SudaniBill  string
+}
+
+//Summary summarizes transacations for a specific card holder
+type Summary struct {
+	Name   string  `json:"name,omitempty"`
+	ID     int     `json:"id,omitempty"`
+	Amount float32 `json:"amount,omitempty"`
+	Count  float32 `json:"count,omitempty"`
 }

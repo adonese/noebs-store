@@ -10,7 +10,7 @@ import (
 
 func Test_createAll(t *testing.T) {
 
-	db := getDB("/mnt/c/Users/MSI/Documents/test000.db")
+	db := getDB("/mnt/c/Users/MSI/Documents/testx.db")
 	defer db.Close()
 	tests := []struct {
 		name string
@@ -39,18 +39,7 @@ func Test_createAll(t *testing.T) {
 			},
 			Amount:     0.0,
 			Successful: false,
-			TransactionType: TransactionType{
-				P2p:         false,
-				ZainTopUp:   false,
-				SudaniTopUp: false,
-				MTNTopUp:    false,
-				Electricity: false,
-				Account:     false,
-				ZainBill:    false,
-				MTNBill:     false,
-				SudaniBill:  false,
-				Purchase:    true,
-			},
+			ServiceID:  2,
 		}, db, true},
 	}
 	for _, tt := range tests {
@@ -64,7 +53,7 @@ func Test_createAll(t *testing.T) {
 
 func Test_createAllUser(t *testing.T) {
 
-	db := getDB("/mnt/c/Users/MSI/Documents/test2.db")
+	db := getDB("/mnt/c/Users/MSI/Documents/testx.db")
 	defer db.Close()
 	tests := []struct {
 		name string
@@ -74,19 +63,18 @@ func Test_createAllUser(t *testing.T) {
 	}{
 		{"test create tables", User{
 			Transactions: []Transaction{{
-
-				// Source: Source{
-				// 	Card: Card{
-				// 		PAN:     "111111111111111",
-				// 		ExpDate: "",
-				// 	},
-				// 	CardID: 0,
-				// 	Account: Account{
-				// 		AccountNumber: "",
-				// 		AccountName:   "",
-				// 	},
-				// 	AccountID: 0,
-				// },
+				Source: Source{
+					Card: Card{
+						PAN:     "111111111111111",
+						ExpDate: "",
+					},
+					CardID: 0,
+					Account: Account{
+						AccountNumber: "",
+						AccountName:   "",
+					},
+					AccountID: 0,
+				},
 				Destination: Destination{
 					ToCard:        "2222222222222",
 					ToAccount:     "",
@@ -95,20 +83,8 @@ func Test_createAllUser(t *testing.T) {
 				},
 				Amount:     0.0,
 				Successful: false,
-				TransactionType: TransactionType{
-					P2p:           false,
-					ZainTopUp:     false,
-					SudaniTopUp:   false,
-					MTNTopUp:      false,
-					Electricity:   false,
-					Account:       false,
-					ZainBill:      false,
-					MTNBill:       false,
-					SudaniBill:    false,
-					Purchase:      false,
-					TransactionID: 0,
-				},
-				UserID: 0,
+				ServiceID:  4,
+				UserID:     3,
 			}},
 		}, db, true},
 	}
@@ -117,6 +93,63 @@ func Test_createAllUser(t *testing.T) {
 			if got := tt.args.createAllUser(db); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getDB() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func TestUser_GetTranSummary(t *testing.T) {
+	db := getDB("/mnt/c/Users/MSI/Documents/testx.db")
+	type fields struct {
+		Model        gorm.Model
+		Transactions []Transaction
+		Cards        []Card
+	}
+	type args struct {
+		db *gorm.DB
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   Summary
+	}{
+		{"successful test", fields{Model: gorm.Model{ID: 1}}, args{db: db}, Summary{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := &User{
+				Model:        tt.fields.Model,
+				Transactions: tt.fields.Transactions,
+				Cards:        tt.fields.Cards,
+			}
+			if got := u.GetTranSummary(tt.args.db); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("User.GetTranSummary() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTransactionType_fill(t *testing.T) {
+	db := getDB("/mnt/c/Users/MSI/Documents/testx.db")
+	type fields struct {
+		Model gorm.Model
+		Name  string
+	}
+
+	tests := []struct {
+		name   string
+		fields fields
+		args   *gorm.DB
+	}{
+		{"successful ", fields{}, db},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ty := &TransactionType{
+				Model: tt.fields.Model,
+				Name:  tt.fields.Name,
+			}
+			ty.fill(tt.args)
 		})
 	}
 }

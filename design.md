@@ -38,3 +38,18 @@ working key,
 isAlive
 shouldnot be traced
 at all
+
+## Queries
+
+User:
+
+- getAll()
+- getFailedCount()
+- getSucceededCount()
+- getFailedAmount()
+- getSucceededAmount()
+- getMostUsedService()
+- getLeastUsedService()
+- getTotalSpending()
+- getCards()
+- getMobile()
