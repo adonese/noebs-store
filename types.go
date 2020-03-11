@@ -145,7 +145,7 @@ func (u *User) GetMobiles(db *gorm.DB) []Mobile {
 
 type Result struct {
 	Transaction
-	Source
+	Card
 	Terminal
 }
 
@@ -176,9 +176,23 @@ func (t *Transaction) Marshal() ([]byte, error) {
 
 //Create struct Transaction with the transactions
 func (t *Transaction) Create(ebs *ebs_fields.GenericEBSResponseFields, name string, db *gorm.DB) error {
-	/*
-		This code is not optimized. We should use joins here instead.
-	*/
+
+	if ebs.PAN != "" {
+		card := &Card{PAN: ebs.PAN}
+		db.FirstOrCreate(card)
+	}
+	if ebs.FromAccount != "" {
+		card := &Card{AccountNumber: ebs.FromAccount}
+		db.FirstOrCreate(card)
+	}
+	if ebs.ToAccount != "" {
+		card := &Card{AccountNumber: ebs.ToAccount}
+		db.FirstOrCreate(card)
+	}
+	if ebs.TerminalID != "" {
+		terminal := &Terminal{TerminalNumber: ebs.TerminalID}
+		db.FirstOrCreate(terminal)
+	}
 
 	// log.Printf("tid = %v, pan = %v\n", )
 	if err := db.Exec(`insert into transactions(amount, created_at, source_id, terminal_id)
@@ -193,9 +207,7 @@ func (t *Transaction) Create(ebs *ebs_fields.GenericEBSResponseFields, name stri
 
 func (t *Transaction) createAll(db *gorm.DB) error {
 	// db.AutoMigrate(&User{})
-	db.AutoMigrate(&Card{})
-	db.AutoMigrate(&Source{})
-	db.AutoMigrate(&TransactionType{}, &User{}, &Terminal{})
+	db.AutoMigrate(&TransactionType{}, &User{}, &Terminal{}, &Card{})
 
 	if err := db.AutoMigrate(&Transaction{}).Error; err != nil {
 		log.Printf("Error in AutoMigrate: Error: %v", err)
@@ -215,35 +227,6 @@ func (t *Transaction) Commit(db *gorm.DB) error {
 	return nil
 }
 
-// Source is the transaction source. It can be initiated from a user
-// or an account. It can happen in any place within our network.
-// it is currently implemented wrong
-type Source struct {
-	gorm.Model
-	Card
-	CardID int
-	Account
-	// UserID        int
-	Transactions []Transaction
-}
-
-func (s *Source) get(ebs *ebs_fields.GenericEBSResponseFields, db *gorm.DB) (int, error) {
-	if err := db.Where("pan = ? OR account_number = ? or account_number = ?", ebs.PAN, ebs.FromAccount, ebs.ToAccount).Find(s).Error; err != nil {
-		return int(s.ID), err
-	}
-	return int(s.ID), nil
-}
-func (s *Source) fill(ebs *ebs_fields.GenericEBSResponseFields) {
-	if ebs.FromAccount != "" {
-		// fill account
-		s.Account.AccountNumber = ebs.FromAccount
-		s.AccountName = "" //FIXME: we need to get the account name
-		return
-	}
-	s.PAN = ebs.PAN
-	return
-}
-
 // UserProfile card holder info + their associated mobile numbers
 type UserProfile struct {
 	Cards   []Card
@@ -252,9 +235,12 @@ type UserProfile struct {
 
 // Card table
 type Card struct {
-	PAN     string
-	ExpDate string
-	UserID  uint
+	gorm.Model
+	PAN           string `gorm:"unique_index"`
+	ExpDate       string
+	UserID        uint
+	Transaction   []Transaction
+	AccountNumber string `gorm:"unique_index"`
 }
 
 // Terminal is related to POS merchants
