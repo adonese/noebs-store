@@ -237,6 +237,17 @@ type Card struct {
 	AccountNumber string `gorm:"unique_index"`
 }
 
+func (c *Card) migrate(db *gorm.DB) {
+	// db.Exec(``)
+}
+func (c *Card) topCards(db *gorm.DB) []Card {
+	var res []Card
+	db.Raw(`select * from cards c
+	join transactions t on t.source_id = c.id
+	where c.pan = ?`, c.PAN).Scan(&res)
+	return res
+}
+
 // Terminal is related to POS merchants
 type Terminal struct {
 	gorm.Model
@@ -288,17 +299,17 @@ func (t *Terminal) getMostUsedService(db *gorm.DB) []servicesCount {
 	join terminals ts on ts.ID = t.terminal_id
 	where ts.terminal_number = ?
 	group by t.service_id
-	`, t.TerminalNumber).Scan(&res)
+	order by t.amount`, t.TerminalNumber).Scan(&res)
 	return res
 }
 
 type servicesCount struct {
-	Count     int
-	Amount    float32
+	Count     int     // counts how many transactions
+	Amount    float32 // transactions total amount (failed / succeeded)
 	Failed    int
 	Succeeded int
 	Name      string
-	ID        int
+	ID        int // services id from transaction type
 }
 
 type purchaseCount struct {
@@ -366,6 +377,7 @@ func (tt *TransactionType) fill(db *gorm.DB) {
 		TransactionType{Name: "Zain Bills"},
 		TransactionType{Name: "Electricity"},
 		TransactionType{Name: "Card Transfer"}}
+
 	db.Create(&t[0])
 	db.Create(&t[1])
 	db.Create(&t[2])
