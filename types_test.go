@@ -405,3 +405,57 @@ func getDB(name string) *gorm.DB {
 	db, _ := getEngine(name)
 	return db
 }
+
+func TestTerminal_getTransactions(t *testing.T) {
+	db := getDB("/mnt/c/Users/MSI/Documents/testt.db")
+	terminal := &Terminal{TerminalNumber: "1234"}
+	name := "purchase"
+
+	type args struct {
+		terminal *Terminal
+		name     string
+		db       *gorm.DB
+	}
+	tests := []struct {
+		name string
+		args args
+		want []Transaction
+	}{
+		{"get related transactions", args{db: db, terminal: terminal, name: name}, []Transaction{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := terminal.getTransactions(tt.args.db); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Terminal.getTransactions() = %v, want %v", got, tt.want)
+			} else {
+				t.Errorf("Terminal.getTransactions() = %v, want %v", got, tt.want)
+
+			}
+		})
+	}
+}
+
+func TestTerminal_getMostUsedService(t *testing.T) {
+	db := getDB("/mnt/c/Users/MSI/Documents/testt.db")
+	terminal := &Terminal{}
+	terminal.Init("12345670")
+
+	type args struct {
+		db *gorm.DB
+	}
+	tests := []struct {
+		name string
+		args args
+		want []servicesCount
+	}{
+		{"get most used services", args{db: db}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			if got := terminal.getMostUsedService(tt.args.db); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Terminal.getMostUsedService() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}

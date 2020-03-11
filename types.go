@@ -143,12 +143,6 @@ func (u *User) GetMobiles(db *gorm.DB) []Mobile {
 	return mobiles
 }
 
-type Result struct {
-	Transaction
-	Card
-	Terminal
-}
-
 //Transaction table
 type Transaction struct {
 	gorm.Model
@@ -251,6 +245,12 @@ type Terminal struct {
 	Transaction    []Transaction
 }
 
+//Init initializes a new terminal id with all of the features packed
+func (t *Terminal) Init(id string) {
+	t.TerminalNumber = id
+
+}
+
 //NewMerchant generates a new merchant in noebs system
 func (t *Terminal) NewMerchant(u *User, db *gorm.DB) error {
 	db.AutoMigrate(&Terminal{})
@@ -268,6 +268,51 @@ func (t *Terminal) getTerminal(name string, db *gorm.DB) error {
 		return err
 	}
 	return nil
+}
+
+func (t *Terminal) getTransactions(db *gorm.DB) []Transaction {
+	var tt []Transaction
+	if err := db.Raw(`select * from transactions t
+		join terminals tt on tt.id = t.terminal_id
+		where tt.terminal_number = ?`, t.TerminalNumber).Scan(&tt).Error; err != nil {
+		log.Printf("Error in &Terminal.getTransactions: %v", err)
+	}
+	return tt
+}
+
+func (t *Terminal) getMostUsedService(db *gorm.DB) []servicesCount {
+	var res []servicesCount
+
+	db.Raw(`select tt.name as name, t.service_id as id, count(t.successful) - sum(t.successful) as failed, sum(t.successful) as succeeded, sum(t.amount) as amount, count(*) as count from transactions t
+	join transaction_types tt on tt.id = t.service_id
+	join terminals ts on ts.ID = t.terminal_id
+	where ts.terminal_number = ?
+	group by t.service_id
+	`, t.TerminalNumber).Scan(&res)
+	return res
+}
+
+type servicesCount struct {
+	Count     int
+	Amount    float32
+	Failed    int
+	Succeeded int
+	Name      string
+	ID        int
+}
+
+type purchaseCount struct {
+	Count     int
+	Amount    float32
+	Failed    int
+	Succeeded int
+}
+
+type p2pCount struct {
+	Count     int
+	Amount    float32
+	Failed    int
+	Succeeded int
 }
 
 //Account info
