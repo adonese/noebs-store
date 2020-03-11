@@ -13,6 +13,9 @@ type User struct {
 	gorm.Model
 	Transactions []Transaction
 	Cards        []Card
+	Name         string
+	Mobile       string
+	Username     string
 }
 
 func (u *User) createAllUser(db *gorm.DB) error {
@@ -39,16 +42,20 @@ func (u *User) createAllUser(db *gorm.DB) error {
 - getCards()
 - getMobile()
 */
-
 func (u *User) GetProfile(db *gorm.DB) User {
 	db.Find(&u)
 	return *u
 }
 
+func (u *User) New(db *gorm.DB, username, email, mobile string) {
+	db.Where("username = ? OR email = ? or mobile = ?", username, email, mobile).Find(u)
+}
+
+//GetFailedCount reports the number of failed transactions for user
 func (u *User) GetFailedCount(db *gorm.DB) int {
 	id := u.ID
 	var count int
-	db.Exec("select count(*) from transactions where user_id = 1 AND successful = 0", &id).Find(&count)
+	db.Raw("select count(*) from transactions where user_id = ? AND successful = 0", &id).Count(&count)
 	return count
 }
 
@@ -136,13 +143,18 @@ func (u *User) GetMobiles(db *gorm.DB) []Mobile {
 	return mobiles
 }
 
+type Result struct {
+	Transaction
+	Source
+	Terminal
+}
+
 //Transaction table
 type Transaction struct {
 	gorm.Model
-	// TransactionID int
-	Source      Source
-	Destination Destination
-
+	TerminalID    uint
+	SourceID      uint
+	DestinationID uint
 	// DestinationID   int
 	Amount     float32
 	Successful bool
@@ -162,14 +174,20 @@ func (t *Transaction) Marshal() ([]byte, error) {
 	return json.Marshal(t)
 }
 
-//Populate struct Transaction with the transactions
-func (t *Transaction) Populate(ebs *ebs_fields.GenericEBSResponseFields, name string) error {
-	id := toID(name)
-	t.Destination.fill(ebs)
-	// t.Source.fill(ebs)
-	// t.TransactionType.fill(id)
-	t.ServiceID = uint(id)
-	t.Amount = ebs.TranAmount
+//Create struct Transaction with the transactions
+func (t *Transaction) Create(ebs *ebs_fields.GenericEBSResponseFields, name string, db *gorm.DB) error {
+	/*
+		This code is not optimized. We should use joins here instead.
+	*/
+
+	// log.Printf("tid = %v, pan = %v\n", )
+	if err := db.Exec(`insert into transactions(amount, created_at, source_id, terminal_id)
+			select ?, datetime('now', 'localtime'), s.id,  t.id  FROM terminals t
+			inner join sources s
+			where t.terminal_number = ? AND s.pan = ?`, ebs.TranAmount, ebs.TerminalID, ebs.PAN).Error; err != nil {
+		log.Printf("Error in *Transaction.Create: %v", err)
+		return err
+	}
 	return nil
 }
 
@@ -177,29 +195,7 @@ func (t *Transaction) createAll(db *gorm.DB) error {
 	// db.AutoMigrate(&User{})
 	db.AutoMigrate(&Card{})
 	db.AutoMigrate(&Source{})
-	db.AutoMigrate(&Destination{})
-	db.AutoMigrate(&TransactionType{}, &User{})
-
-	if err := db.AutoMigrate(&Transaction{}).Error; err != nil {
-		log.Printf("Error in AutoMigrate: Error: %v", err)
-		return err
-	}
-	if err := db.Create(t).Error; err != nil {
-		log.Printf("Error in db.Create: Error: %v", err)
-		return err
-	}
-
-	return nil
-
-}
-
-//Create commits result to database. It assumed a populated struct, Transaction.
-func (t *Transaction) Create(db *gorm.DB) error {
-	// db.AutoMigrate(&User{})
-	db.AutoMigrate(&Card{})
-	db.AutoMigrate(&Source{})
-	db.AutoMigrate(&Destination{})
-	db.AutoMigrate(&TransactionType{})
+	db.AutoMigrate(&TransactionType{}, &User{}, &Terminal{})
 
 	if err := db.AutoMigrate(&Transaction{}).Error; err != nil {
 		log.Printf("Error in AutoMigrate: Error: %v", err)
@@ -221,17 +217,22 @@ func (t *Transaction) Commit(db *gorm.DB) error {
 
 // Source is the transaction source. It can be initiated from a user
 // or an account. It can happen in any place within our network.
+// it is currently implemented wrong
 type Source struct {
 	gorm.Model
 	Card
 	CardID int
 	Account
-	AccountID int
 	// UserID        int
-	// Transactions []Transaction
-	TransactionID uint
+	Transactions []Transaction
 }
 
+func (s *Source) get(ebs *ebs_fields.GenericEBSResponseFields, db *gorm.DB) (int, error) {
+	if err := db.Where("pan = ? OR account_number = ? or account_number = ?", ebs.PAN, ebs.FromAccount, ebs.ToAccount).Find(s).Error; err != nil {
+		return int(s.ID), err
+	}
+	return int(s.ID), nil
+}
 func (s *Source) fill(ebs *ebs_fields.GenericEBSResponseFields) {
 	if ebs.FromAccount != "" {
 		// fill account
@@ -243,28 +244,7 @@ func (s *Source) fill(ebs *ebs_fields.GenericEBSResponseFields) {
 	return
 }
 
-// Destination is the transaction source. It can be initiated from a user
-// or an account. It can happen in any place within our network.
-type Destination struct {
-	ToCard        string
-	ToAccount     string
-	ToAccountName string
-	TransactionID uint
-}
-
-//fill the destination struct with either account / card data
-func (d *Destination) fill(ebs *ebs_fields.GenericEBSResponseFields) {
-	if ebs.ToAccount != "" {
-		// fill account
-		d.ToAccount = ebs.ToAccount
-		d.ToAccountName = "" //FIXME: we need to get the account name
-		return
-	}
-	d.ToCard = ebs.ToCard
-	return
-}
-
-// User card holder info + their associated mobile numbers
+// UserProfile card holder info + their associated mobile numbers
 type UserProfile struct {
 	Cards   []Card
 	Mobiles []Mobile
@@ -275,6 +255,33 @@ type Card struct {
 	PAN     string
 	ExpDate string
 	UserID  uint
+}
+
+// Terminal is related to POS merchants
+type Terminal struct {
+	gorm.Model
+	TerminalNumber string `gorm:"unique_index"`
+	Merchant       User
+	Transaction    []Transaction
+}
+
+//NewMerchant generates a new merchant in noebs system
+func (t *Terminal) NewMerchant(u *User, db *gorm.DB) error {
+	db.AutoMigrate(&Terminal{})
+	t.Merchant = *u
+	if err := db.Create(t).Error; err != nil {
+		return err
+	}
+	return nil
+
+}
+
+func (t *Terminal) getTerminal(name string, db *gorm.DB) error {
+	t.TerminalNumber = name
+	if err := db.Where(t).Error; err != nil {
+		return err
+	}
+	return nil
 }
 
 //Account info
@@ -315,6 +322,7 @@ type TransactionType struct {
 }
 
 func (tt *TransactionType) fill(db *gorm.DB) {
+
 	db.AutoMigrate(&tt)
 	//tt.Purchase = true
 	t := []TransactionType{TransactionType{Name: "Purchase"},

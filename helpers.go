@@ -1,7 +1,10 @@
 package store
 
 import (
+	"log"
+
 	"github.com/jinzhu/gorm"
+	// we use this internally to get sqlite dialect
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
@@ -28,7 +31,10 @@ func toID(name string) int {
 
 }
 
-func getDB(name string) *gorm.DB {
-	db, _ := gorm.Open("sqlite3", name)
-	return db
+func getEngine(name string) (*gorm.DB, error) {
+	db, err := gorm.Open("sqlite3", name)
+	if err != nil {
+		log.Printf("Error in getEngine: %v", err)
+	}
+	return db, err
 }
